@@ -70,7 +70,13 @@ module.exports = {
       const cfg = getGuildConfig(client.db, interaction.guildId);
       const categoryId = cfg?.ticket_category_id;
       const staffRoleId = cfg?.staff_role_id;
-      const name = `ticket-${interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0,8)}-${interaction.user.discriminator}`;
+      // Compute next incremental ticket number per guild
+      let ticketNumber = 1;
+      try {
+        const row = client.db.prepare('SELECT IFNULL(MAX(id), 0) + 1 AS next FROM tickets WHERE guild_id = ?').get(interaction.guildId);
+        ticketNumber = row?.next || 1;
+      } catch (_) {}
+      const name = `ticket-${ticketNumber}`;
       const overwrites = [
         { id: interaction.guild.roles.everyone.id, deny: ['ViewChannel'] },
         { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }

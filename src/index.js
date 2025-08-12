@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Client, Collection, GatewayIntentBits, Partials, Events } = require('discord.js');
-const { initDb } = require('./lib/db');
+const { initDb, maybeRestoreGuildConfigs } = require('./lib/db');
 const { loadCommands, registerInteractions } = require('./lib/loader');
 const registerLogging = require('./events/logging');
 const registerReactionRoles = require('./events/reactionRoles');
@@ -23,6 +23,8 @@ client.cooldowns = new Collection();
   // Init DB
   const db = initDb();
   client.db = db;
+  // Restore guild config snapshot if DB is empty
+  try { const restored = maybeRestoreGuildConfigs(db); if (restored) console.log(`Restored ${restored} guild config(s) from snapshot.`); } catch (_) {}
 
   // Load commands
   await loadCommands(client);
@@ -45,14 +47,13 @@ client.cooldowns = new Collection();
     }
     console.log(`Registered ${cmds.length} commands in ${count} guild(s).`);
 
-    // Lightweight RAM monitor: log to console and update presence every 60s
+    // RAM monitor: log to console every 60s (no Discord presence)
     const formatMB = bytes => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
     const updateRam = () => {
       const mem = process.memoryUsage();
       const rss = formatMB(mem.rss);
       const heapUsed = formatMB(mem.heapUsed);
       console.log(`[RAM] rss=${rss}, heapUsed=${heapUsed}`);
-      try { c.user.setPresence({ activities: [{ name: `RAM ${rss}`, type: 0 }], status: 'online' }); } catch (_) {}
     };
     updateRam();
     if (!client.__ramInterval) client.__ramInterval = setInterval(updateRam, 60_000);

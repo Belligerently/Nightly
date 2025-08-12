@@ -1,4 +1,18 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { getGuildConfig } = require('../../lib/db');
+function logModAction(interaction, action, details) {
+  const cfg = getGuildConfig(interaction.client.db, interaction.guildId);
+  if (!cfg?.log_channel_id) return;
+  const ch = interaction.guild.channels.cache.get(cfg.log_channel_id);
+  if (!ch) return;
+  const embed = new EmbedBuilder()
+    .setColor('Blurple')
+    .setTitle(`Mod Action: ${action}`)
+    .setDescription(details)
+    .setTimestamp()
+    .setFooter({ text: `By ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() });
+  ch.send({ embeds: [embed] }).catch(() => {});
+}
 const ms = (str) => {
   // simple ms parser for inputs like 10m, 2h, 1d
   const m = /^\s*(\d+)\s*([smhd])?\s*$/i.exec(str || '');
@@ -69,6 +83,7 @@ module.exports = {
         const reason = interaction.options.getString('reason') || 'No reason provided';
         const member = await guild.members.fetch(user.id);
         await member.kick(reason);
+        logModAction(interaction, 'Kick', `User: ${user.tag} (${user.id})\nReason: ${reason}`);
         return interaction.reply({ content: `Kicked ${user.tag}.`, ephemeral: true });
       }
       if (sub === 'ban') {
@@ -76,6 +91,7 @@ module.exports = {
         const reason = interaction.options.getString('reason') || 'No reason provided';
         const days = interaction.options.getInteger('days') ?? 0;
         await guild.members.ban(user.id, { reason, deleteMessageDays: Math.min(Math.max(days, 0), 7) });
+        logModAction(interaction, 'Ban', `User: ${user.tag} (${user.id})\nReason: ${reason}\nDelete Days: ${days}`);
         return interaction.reply({ content: `Banned ${user.tag}.`, ephemeral: true });
       }
       if (sub === 'softban') {
@@ -84,11 +100,13 @@ module.exports = {
         const days = interaction.options.getInteger('days') ?? 1;
         await guild.members.ban(user.id, { reason: `[Softban] ${reason}`, deleteMessageDays: Math.min(Math.max(days, 0), 7) });
         await guild.bans.remove(user.id, 'Softban unban');
+        logModAction(interaction, 'Softban', `User: ${user.tag} (${user.id})\nReason: ${reason}\nDelete Days: ${days}`);
         return interaction.reply({ content: `Softbanned ${user.tag}.`, ephemeral: true });
       }
       if (sub === 'unban') {
         const userId = interaction.options.getString('userid', true);
         await guild.bans.remove(userId).catch(() => {});
+        logModAction(interaction, 'Unban', `User ID: ${userId}`);
         return interaction.reply({ content: `Unbanned ${userId}.`, ephemeral: true });
       }
       if (sub === 'timeout') {
@@ -98,17 +116,20 @@ module.exports = {
         if (!parseMs) return interaction.reply({ content: 'Invalid duration. Use formats like 10m, 2h, 1d.', ephemeral: true });
         const member = await guild.members.fetch(user.id);
         await member.timeout(parseMs, interaction.options.getString('reason') || 'No reason provided');
+        logModAction(interaction, 'Timeout', `User: ${user.tag} (${user.id})\nDuration: ${duration}`);
         return interaction.reply({ content: `Timed out ${user.tag} for ${duration}.`, ephemeral: true });
       }
       if (sub === 'untimeout') {
         const user = interaction.options.getUser('user', true);
         const member = await guild.members.fetch(user.id);
         await member.timeout(null).catch(() => {});
+        logModAction(interaction, 'Untimeout', `User: ${user.tag} (${user.id})`);
         return interaction.reply({ content: `Removed timeout from ${user.tag}.`, ephemeral: true });
       }
       if (sub === 'purge') {
         const count = Math.min(Math.max(interaction.options.getInteger('count', true), 1), 100);
         const msgs = await interaction.channel.bulkDelete(count, true);
+        logModAction(interaction, 'Purge', `Channel: ${interaction.channel}\nMessages deleted: ${msgs.size}`);
         return interaction.reply({ content: `Deleted ${msgs.size} messages.`, ephemeral: true });
       }
       if (sub === 'cleanuser') {
@@ -121,11 +142,13 @@ module.exports = {
           const res = await interaction.channel.bulkDelete(toDelete, true).catch(() => null);
           deleted = res?.size ?? toDelete.length;
         }
+        logModAction(interaction, 'CleanUser', `Channel: ${interaction.channel}\nUser: ${target.tag} (${target.id})\nMessages deleted: ${deleted}`);
         return interaction.reply({ content: `Deleted ${deleted} messages from ${target.tag}.`, ephemeral: true });
       }
       if (sub === 'slowmode') {
         const seconds = Math.max(interaction.options.getInteger('seconds', true), 0);
         await interaction.channel.setRateLimitPerUser(seconds).catch(() => {});
+        logModAction(interaction, 'Slowmode', `Channel: ${interaction.channel}\nSeconds: ${seconds}`);
         return interaction.reply({ content: `Slowmode set to ${seconds}s.`, ephemeral: true });
       }
       if (sub === 'nick') {
@@ -133,22 +156,26 @@ module.exports = {
         const nickname = interaction.options.getString('nickname', true);
         const member = await guild.members.fetch(user.id);
         await member.setNickname(nickname).catch(() => {});
+        logModAction(interaction, 'Nick', `User: ${user.tag} (${user.id})\nNew nickname: ${nickname}`);
         return interaction.reply({ content: `Nickname updated.`, ephemeral: true });
       }
       if (sub === 'clearnick') {
         const user = interaction.options.getUser('user', true);
         const member = await guild.members.fetch(user.id);
         await member.setNickname(null).catch(() => {});
+        logModAction(interaction, 'ClearNick', `User: ${user.tag} (${user.id})`);
         return interaction.reply({ content: `Nickname cleared.`, ephemeral: true });
       }
       if (sub === 'lock') {
         const everyone = guild.roles.everyone;
         await interaction.channel.permissionOverwrites.edit(everyone, { SendMessages: false });
+        logModAction(interaction, 'Lock', `Channel: ${interaction.channel}`);
         return interaction.reply({ content: 'Channel locked.', ephemeral: true });
       }
       if (sub === 'unlock') {
         const everyone = guild.roles.everyone;
         await interaction.channel.permissionOverwrites.edit(everyone, { SendMessages: true });
+        logModAction(interaction, 'Unlock', `Channel: ${interaction.channel}`);
         return interaction.reply({ content: 'Channel unlocked.', ephemeral: true });
       }
       if (sub === 'banlist') {

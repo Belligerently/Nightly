@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 const DB_PATH = path.join(__dirname, '..', '..', 'data', 'bot.db');
+const SNAPSHOT_PATH = path.join(__dirname, '..', '..', 'data', 'guild_config.json');
 
 function ensureDir(p) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
@@ -95,21 +96,31 @@ function upsertGuildConfig(db, guildId, patch) {
                 admin_role_id = excluded.admin_role_id,
                 transcript_channel_id = excluded.transcript_channel_id,
                 staff_role_id = excluded.staff_role_id`).run({ guild_id: guildId, ...next });
+  try { exportGuildConfigs(db); } catch (_) {}
   return getGuildConfig(db, guildId);
 }
 
 function setTranscriptChannel(db, guildId, channelId) {
   const current = getGuildConfig(db, guildId) || { guild_id: guildId };
   const patch = { transcript_channel_id: channelId };
-  const next = { ...current, ...patch };
-  db.prepare(`INSERT INTO guild_config (guild_id, log_channel_id, ticket_category_id, verification_role_id, admin_role_id, transcript_channel_id)
-              VALUES (@guild_id, @log_channel_id, @ticket_category_id, @verification_role_id, @admin_role_id, @transcript_channel_id)
+  const next = {
+    log_channel_id: current.log_channel_id,
+    ticket_category_id: current.ticket_category_id,
+    verification_role_id: current.verification_role_id,
+    admin_role_id: current.admin_role_id,
+    transcript_channel_id: channelId,
+    staff_role_id: current.staff_role_id
+  };
+  db.prepare(`INSERT INTO guild_config (guild_id, log_channel_id, ticket_category_id, verification_role_id, admin_role_id, transcript_channel_id, staff_role_id)
+              VALUES (@guild_id, @log_channel_id, @ticket_category_id, @verification_role_id, @admin_role_id, @transcript_channel_id, @staff_role_id)
               ON CONFLICT(guild_id) DO UPDATE SET
                 log_channel_id = excluded.log_channel_id,
                 ticket_category_id = excluded.ticket_category_id,
                 verification_role_id = excluded.verification_role_id,
                 admin_role_id = excluded.admin_role_id,
-                transcript_channel_id = excluded.transcript_channel_id`).run({ guild_id: guildId, ...next });
+                transcript_channel_id = excluded.transcript_channel_id,
+                staff_role_id = excluded.staff_role_id`).run({ guild_id: guildId, ...next });
+  try { exportGuildConfigs(db); } catch (_) {}
   return getGuildConfig(db, guildId);
 }
 
@@ -149,6 +160,54 @@ function removeWarning(db, id, guildId) {
   return db.prepare('DELETE FROM warnings WHERE id = ? AND guild_id = ?').run(id, guildId);
 }
 
+function getNextTicketNumber(db, guildId) {
+  const row = db.prepare('SELECT COALESCE(MAX(id), 0) + 1 AS next FROM tickets WHERE guild_id = ?').get(guildId);
+  return row?.next || 1;
+}
+
+function getAllGuildConfigs(db) {
+  return db.prepare('SELECT * FROM guild_config').all();
+}
+
+function exportGuildConfigs(db) {
+  const rows = getAllGuildConfigs(db);
+  try {
+    ensureDir(path.dirname(SNAPSHOT_PATH));
+    fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify(rows, null, 2), 'utf8');
+  } catch (_) {}
+}
+
+function importGuildConfigs(db) {
+  if (!fs.existsSync(SNAPSHOT_PATH)) return 0;
+  try {
+    const text = fs.readFileSync(SNAPSHOT_PATH, 'utf8');
+    const arr = JSON.parse(text);
+    if (!Array.isArray(arr)) return 0;
+    let n = 0;
+    for (const row of arr) {
+      if (!row.guild_id) continue;
+      upsertGuildConfig(db, row.guild_id, {
+        log_channel_id: row.log_channel_id || null,
+        ticket_category_id: row.ticket_category_id || null,
+        verification_role_id: row.verification_role_id || null,
+        admin_role_id: row.admin_role_id || null,
+        transcript_channel_id: row.transcript_channel_id || null,
+        staff_role_id: row.staff_role_id || null
+      });
+      n++;
+    }
+    return n;
+  } catch (_) { return 0; }
+}
+
+function maybeRestoreGuildConfigs(db) {
+  try {
+    const count = db.prepare('SELECT COUNT(1) as c FROM guild_config').get().c;
+    if (count > 0) return 0;
+    return importGuildConfigs(db);
+  } catch (_) { return 0; }
+}
+
 function addReactionRole(db, mapping) {
   const stmt = db.prepare(`INSERT INTO reaction_roles (guild_id, channel_id, message_id, emoji_key, role_id)
     VALUES (@guild_id, @channel_id, @message_id, @emoji_key, @role_id)`);
@@ -169,4 +228,4 @@ function getReactionRole(db, guildId, messageId, emojiKey) {
     .get(guildId, messageId, emojiKey);
 }
 
-module.exports = { initDb, getGuildConfig, upsertGuildConfig, setTranscriptChannel, createTicketPanel, getTicketPanelByToken, insertTicket, closeTicket, addWarning, listWarnings, removeWarning, addReactionRole, deleteReactionRole, getReactionRolesByMessage, getReactionRole };
+module.exports = { initDb, getGuildConfig, upsertGuildConfig, setTranscriptChannel, createTicketPanel, getTicketPanelByToken, insertTicket, closeTicket, addWarning, listWarnings, removeWarning, addReactionRole, deleteReactionRole, getReactionRolesByMessage, getReactionRole, exportGuildConfigs, importGuildConfigs, maybeRestoreGuildConfigs, getNextTicketNumber };
