@@ -1,0 +1,20 @@
+{
+  "name": "nightly-bot",
+  "version": "1.0.0",
+  "description": "Discord moderation bot with logging, tickets, verification, embeds, roles, and admin access control.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node scripts/deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^9.4.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  }
+}
