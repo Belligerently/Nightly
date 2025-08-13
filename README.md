@@ -28,6 +28,13 @@ npm start
 - Commands are registered automatically per guild on startup and when the bot joins a new guild.
 - Make sure the bot has permissions and intents (Guild Members intent) enabled in the portal.
 
+## Guilds
+The bot registers slash commands per guild on startup and when it joins new guilds.
+
+Avoid duplicates:
+- Don’t deploy global slash commands if you use per-guild registration.
+- If you previously used scripts/deploy-commands.js without GUILD_ID (global), duplicates can appear. On startup the bot now clears any global commands automatically.
+
 ## Permissions
 - Use `/setconfig adminrole` to set an admin role. Users with that role (or server Admin permission) can run admin-only commands.
 

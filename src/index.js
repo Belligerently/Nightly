@@ -34,6 +34,17 @@ client.cooldowns = new Collection();
 
   client.once(Events.ClientReady, async c => {
     console.log(`Logged in as ${c.user.tag}`);
+    // Clear global application commands to avoid duplicates if previously deployed globally
+    try {
+      const existingGlobal = await client.application.commands.fetch();
+      if (existingGlobal.size > 0) {
+        console.log(`Found ${existingGlobal.size} global command(s). Clearing to avoid duplicates.`);
+        await client.application.commands.set([]);
+      }
+    } catch (e) {
+      console.warn('Unable to check/clear global commands:', e?.message || e);
+    }
+    // Per-guild command registration (fast and no client ID needed)
     // Per-guild command registration (fast and no client ID needed)
     const cmds = client.applicationCommandsData || [];
     let count = 0;
@@ -42,10 +53,10 @@ client.cooldowns = new Collection();
         await guild.commands.set(cmds);
         count++;
       } catch (e) {
-        console.error(`Failed to register commands for guild ${guild.name} (${id})`, e);
+    console.error(`Failed to register commands for guild ${guild.name} (${id})`, e);
       }
     }
-    console.log(`Registered ${cmds.length} commands in ${count} guild(s).`);
+  console.log(`Registered ${cmds.length} commands in ${count} guild(s).`);
 
     // RAM monitor: log to console every 60s (no Discord presence)
     const formatMB = bytes => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
