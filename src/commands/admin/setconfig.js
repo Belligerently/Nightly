@@ -36,11 +36,11 @@ module.exports = {
     .addSubcommand(sc => sc
       .setName('welcomemessage')
       .setDescription('Configure the welcome embed message')
-      .addStringOption(o => o.setName('title').setDescription('Embed title').setRequired(false))
-      .addStringOption(o => o.setName('description').setDescription('Embed description (you can use {user} and {server})').setRequired(true))
-      .addStringOption(o => o.setName('color').setDescription('Hex color like #5865F2').setRequired(false))
-      .addStringOption(o => o.setName('thumbnail').setDescription('Thumbnail URL').setRequired(false))
-      .addStringOption(o => o.setName('image').setDescription('Image URL').setRequired(false)))
+  .addStringOption(o => o.setName('description').setDescription('Embed description (you can use {user} and {server})').setRequired(true))
+  .addStringOption(o => o.setName('title').setDescription('Embed title').setRequired(false))
+  .addStringOption(o => o.setName('color').setDescription('Hex color like #5865F2').setRequired(false))
+  .addStringOption(o => o.setName('thumbnail').setDescription('Thumbnail URL').setRequired(false))
+  .addStringOption(o => o.setName('image').setDescription('Image URL').setRequired(false)))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false),
   adminOnly: true,
