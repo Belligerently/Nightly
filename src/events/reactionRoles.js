@@ -1,5 +1,5 @@
 const { Events } = require('discord.js');
-const { getReactionRole } = require('../lib/db');
+const { getReactionRole, deleteReactionRolesByMessage } = require('../lib/db');
 
 module.exports = function registerReactionRoles(client) {
   const resolveKey = reaction => {
@@ -34,5 +34,13 @@ module.exports = function registerReactionRoles(client) {
       if (!member) return;
       await member.roles.remove(map.role_id).catch(() => {});
     } catch (e) { console.error('RR remove error', e); }
+  });
+
+  // Cleanup mappings when a panel message is deleted
+  client.on(Events.MessageDelete, async (message) => {
+    try {
+      if (!message?.guild) return;
+      deleteReactionRolesByMessage(client.db, message.guild.id, message.id);
+    } catch (e) { console.error('RR cleanup error', e); }
   });
 };

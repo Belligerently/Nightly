@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { Events, Collection, PermissionFlagsBits } = require('discord.js');
+const { Events, PermissionFlagsBits } = require('discord.js');
 
 async function loadCommands(client) {
   const commands = [];
@@ -13,6 +13,8 @@ async function loadCommands(client) {
       const filePath = path.join(folderPath, file);
       const command = require(filePath);
       if ('data' in command && 'execute' in command) {
+        // Attach category for help command
+        command.category = folder;
         client.commands.set(command.data.name, command);
         commands.push(command.data.toJSON());
       }

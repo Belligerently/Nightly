@@ -21,12 +21,17 @@ function initDb() {
     verification_role_id TEXT,
     admin_role_id TEXT,
     transcript_channel_id TEXT,
-    staff_role_id TEXT
+    staff_role_id TEXT,
+    welcome_channel_id TEXT,
+    welcome_message_json TEXT
   )`).run();
 
   // Migrations: add transcript_channel_id and staff_role_id if missing
   try { db.prepare('ALTER TABLE guild_config ADD COLUMN transcript_channel_id TEXT').run(); } catch (_) {}
   try { db.prepare('ALTER TABLE guild_config ADD COLUMN staff_role_id TEXT').run(); } catch (_) {}
+  // Migrations: add welcome columns
+  try { db.prepare('ALTER TABLE guild_config ADD COLUMN welcome_channel_id TEXT').run(); } catch (_) {}
+  try { db.prepare('ALTER TABLE guild_config ADD COLUMN welcome_message_json TEXT').run(); } catch (_) {}
 
   db.prepare(`CREATE TABLE IF NOT EXISTS tickets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,6 +74,21 @@ function initDb() {
     role_id TEXT NOT NULL
   )`).run();
 
+  // Giveaways table
+  db.prepare(`CREATE TABLE IF NOT EXISTS giveaways (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT,
+    prize TEXT NOT NULL,
+    winner_count INTEGER NOT NULL DEFAULT 1,
+    host_id TEXT NOT NULL,
+    ends_at INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    winners_json TEXT,
+    ended_at INTEGER
+  )`).run();
+
   return db;
 }
 
@@ -85,41 +105,48 @@ function upsertGuildConfig(db, guildId, patch) {
     admin_role_id: current.admin_role_id,
     transcript_channel_id: current.transcript_channel_id,
     staff_role_id: current.staff_role_id,
+    welcome_channel_id: current.welcome_channel_id,
+    welcome_message_json: current.welcome_message_json,
     ...patch
   };
-  db.prepare(`INSERT INTO guild_config (guild_id, log_channel_id, ticket_category_id, verification_role_id, admin_role_id, transcript_channel_id, staff_role_id)
-              VALUES (@guild_id, @log_channel_id, @ticket_category_id, @verification_role_id, @admin_role_id, @transcript_channel_id, @staff_role_id)
+  db.prepare(`INSERT INTO guild_config (guild_id, log_channel_id, ticket_category_id, verification_role_id, admin_role_id, transcript_channel_id, staff_role_id, welcome_channel_id, welcome_message_json)
+              VALUES (@guild_id, @log_channel_id, @ticket_category_id, @verification_role_id, @admin_role_id, @transcript_channel_id, @staff_role_id, @welcome_channel_id, @welcome_message_json)
               ON CONFLICT(guild_id) DO UPDATE SET
                 log_channel_id = excluded.log_channel_id,
                 ticket_category_id = excluded.ticket_category_id,
                 verification_role_id = excluded.verification_role_id,
                 admin_role_id = excluded.admin_role_id,
                 transcript_channel_id = excluded.transcript_channel_id,
-                staff_role_id = excluded.staff_role_id`).run({ guild_id: guildId, ...next });
+                staff_role_id = excluded.staff_role_id,
+                welcome_channel_id = excluded.welcome_channel_id,
+                welcome_message_json = excluded.welcome_message_json`).run({ guild_id: guildId, ...next });
   try { exportGuildConfigs(db); } catch (_) {}
   return getGuildConfig(db, guildId);
 }
 
 function setTranscriptChannel(db, guildId, channelId) {
   const current = getGuildConfig(db, guildId) || { guild_id: guildId };
-  const patch = { transcript_channel_id: channelId };
   const next = {
     log_channel_id: current.log_channel_id,
     ticket_category_id: current.ticket_category_id,
     verification_role_id: current.verification_role_id,
     admin_role_id: current.admin_role_id,
     transcript_channel_id: channelId,
-    staff_role_id: current.staff_role_id
+    staff_role_id: current.staff_role_id,
+    welcome_channel_id: current.welcome_channel_id,
+    welcome_message_json: current.welcome_message_json
   };
-  db.prepare(`INSERT INTO guild_config (guild_id, log_channel_id, ticket_category_id, verification_role_id, admin_role_id, transcript_channel_id, staff_role_id)
-              VALUES (@guild_id, @log_channel_id, @ticket_category_id, @verification_role_id, @admin_role_id, @transcript_channel_id, @staff_role_id)
+  db.prepare(`INSERT INTO guild_config (guild_id, log_channel_id, ticket_category_id, verification_role_id, admin_role_id, transcript_channel_id, staff_role_id, welcome_channel_id, welcome_message_json)
+              VALUES (@guild_id, @log_channel_id, @ticket_category_id, @verification_role_id, @admin_role_id, @transcript_channel_id, @staff_role_id, @welcome_channel_id, @welcome_message_json)
               ON CONFLICT(guild_id) DO UPDATE SET
                 log_channel_id = excluded.log_channel_id,
                 ticket_category_id = excluded.ticket_category_id,
                 verification_role_id = excluded.verification_role_id,
                 admin_role_id = excluded.admin_role_id,
                 transcript_channel_id = excluded.transcript_channel_id,
-                staff_role_id = excluded.staff_role_id`).run({ guild_id: guildId, ...next });
+                staff_role_id = excluded.staff_role_id,
+                welcome_channel_id = excluded.welcome_channel_id,
+                welcome_message_json = excluded.welcome_message_json`).run({ guild_id: guildId, ...next });
   try { exportGuildConfigs(db); } catch (_) {}
   return getGuildConfig(db, guildId);
 }
@@ -144,7 +171,7 @@ function insertTicket(db, { guild_id, channel_id, user_id, status = 'open' }) {
 }
 
 function closeTicket(db, channelId) {
-  return db.prepare('UPDATE tickets SET status = \"closed\" WHERE channel_id = ?').run(channelId);
+  return db.prepare('UPDATE tickets SET status = "closed" WHERE channel_id = ?').run(channelId);
 }
 
 function addWarning(db, { guild_id, user_id, moderator_id, reason }) {
@@ -192,7 +219,9 @@ function importGuildConfigs(db) {
         verification_role_id: row.verification_role_id || null,
         admin_role_id: row.admin_role_id || null,
         transcript_channel_id: row.transcript_channel_id || null,
-        staff_role_id: row.staff_role_id || null
+        staff_role_id: row.staff_role_id || null,
+        welcome_channel_id: row.welcome_channel_id || null,
+        welcome_message_json: row.welcome_message_json || null
       });
       n++;
     }
@@ -219,6 +248,11 @@ function deleteReactionRole(db, { guild_id, message_id, emoji_key }) {
     .run(guild_id, message_id, emoji_key);
 }
 
+function deleteReactionRolesByMessage(db, guildId, messageId) {
+  return db.prepare('DELETE FROM reaction_roles WHERE guild_id = ? AND message_id = ?')
+    .run(guildId, messageId);
+}
+
 function getReactionRolesByMessage(db, guildId, messageId) {
   return db.prepare('SELECT * FROM reaction_roles WHERE guild_id = ? AND message_id = ?').all(guildId, messageId);
 }
@@ -228,4 +262,30 @@ function getReactionRole(db, guildId, messageId, emojiKey) {
     .get(guildId, messageId, emojiKey);
 }
 
-module.exports = { initDb, getGuildConfig, upsertGuildConfig, setTranscriptChannel, createTicketPanel, getTicketPanelByToken, insertTicket, closeTicket, addWarning, listWarnings, removeWarning, addReactionRole, deleteReactionRole, getReactionRolesByMessage, getReactionRole, exportGuildConfigs, importGuildConfigs, maybeRestoreGuildConfigs, getNextTicketNumber };
+// Giveaway helpers
+function addGiveaway(db, g) {
+  const stmt = db.prepare(`INSERT INTO giveaways (guild_id, channel_id, message_id, prize, winner_count, host_id, ends_at, status)
+    VALUES (@guild_id, @channel_id, @message_id, @prize, @winner_count, @host_id, @ends_at, @status)`);
+  const info = stmt.run({ ...g, status: g.status || 'running', message_id: g.message_id || null });
+  return info.lastInsertRowid;
+}
+
+function setGiveawayMessageId(db, id, messageId) {
+  db.prepare('UPDATE giveaways SET message_id = ? WHERE id = ?').run(messageId, id);
+}
+
+function getGiveawayByMessageId(db, guildId, messageId) {
+  return db.prepare('SELECT * FROM giveaways WHERE guild_id = ? AND message_id = ?').get(guildId, messageId);
+}
+
+function listDueGiveaways(db, nowTs) {
+  return db.prepare("SELECT * FROM giveaways WHERE status = 'running' AND ends_at <= ?").all(nowTs);
+}
+
+function endGiveaway(db, id, winners) {
+  const winners_json = JSON.stringify(winners || []);
+  db.prepare("UPDATE giveaways SET status = 'ended', winners_json = ?, ended_at = ? WHERE id = ?")
+    .run(winners_json, Date.now(), id);
+}
+
+module.exports = { initDb, getGuildConfig, upsertGuildConfig, setTranscriptChannel, createTicketPanel, getTicketPanelByToken, insertTicket, closeTicket, addWarning, listWarnings, removeWarning, addReactionRole, deleteReactionRole, deleteReactionRolesByMessage, getReactionRolesByMessage, getReactionRole, exportGuildConfigs, importGuildConfigs, maybeRestoreGuildConfigs, getNextTicketNumber, addGiveaway, setGiveawayMessageId, getGiveawayByMessageId, listDueGiveaways, endGiveaway };

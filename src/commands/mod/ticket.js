@@ -9,6 +9,9 @@ module.exports = {
       .setName('panel')
       .setDescription('Create a ticket panel (opens a popup to customize)'))
     .addSubcommand(sc => sc
+      .setName('list')
+      .setDescription('List open tickets'))
+    .addSubcommand(sc => sc
       .setName('close')
       .setDescription('Close the current ticket channel'))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
@@ -22,7 +25,7 @@ module.exports = {
       const pDesc = new TextInputBuilder().setCustomId('pDesc').setLabel('Panel Description').setStyle(TextInputStyle.Paragraph).setRequired(true);
       const pColor = new TextInputBuilder().setCustomId('pColor').setLabel('Panel Color (hex, optional)').setStyle(TextInputStyle.Short).setRequired(false);
       const btnLabel = new TextInputBuilder().setCustomId('btnLabel').setLabel('Button Label').setStyle(TextInputStyle.Short).setRequired(false);
-  const welcomeConfig = new TextInputBuilder().setCustomId('welcomeConfig').setLabel('Welcome JSON (title, desc, color, close)').setStyle(TextInputStyle.Paragraph).setRequired(false);
+      const welcomeConfig = new TextInputBuilder().setCustomId('welcomeConfig').setLabel('Welcome JSON (title, desc, color, close)').setStyle(TextInputStyle.Paragraph).setRequired(false);
       modal.addComponents(
         new ActionRowBuilder().addComponents(pTitle),
         new ActionRowBuilder().addComponents(pDesc),
@@ -32,6 +35,21 @@ module.exports = {
       );
       await interaction.showModal(modal);
       return;
+    }
+
+    if (sub === 'list') {
+      try {
+        const rows = interaction.client.db.prepare("SELECT * FROM tickets WHERE guild_id = ? AND status = 'open' ORDER BY id ASC").all(interaction.guildId);
+        if (!rows.length) return interaction.reply({ content: 'No open tickets.', ephemeral: true });
+        const lines = await Promise.all(rows.slice(0, 20).map(async r => {
+          const ch = await interaction.guild.channels.fetch(r.channel_id).catch(() => null);
+          return `${ch ? ch : `#${r.channel_id}`} — <@${r.user_id}>`;
+        }));
+        return interaction.reply({ content: `Open tickets (${rows.length}):\n${lines.join('\n')}${rows.length>20 ? `\n…and ${rows.length-20} more` : ''}`, ephemeral: true });
+      } catch (e) {
+        console.error(e);
+        return interaction.reply({ content: 'Failed to list tickets.', ephemeral: true });
+      }
     }
 
     if (sub === 'close') {

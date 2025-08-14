@@ -4,6 +4,8 @@ const { initDb, maybeRestoreGuildConfigs } = require('./lib/db');
 const { loadCommands, registerInteractions } = require('./lib/loader');
 const registerLogging = require('./events/logging');
 const registerReactionRoles = require('./events/reactionRoles');
+const { listDueGiveaways } = require('./lib/db');
+const { concludeGiveaway } = require('./lib/giveaways');
 
 const client = new Client({
   intents: [
@@ -45,7 +47,6 @@ client.cooldowns = new Collection();
       console.warn('Unable to check/clear global commands:', e?.message || e);
     }
     // Per-guild command registration (fast and no client ID needed)
-    // Per-guild command registration (fast and no client ID needed)
     const cmds = client.applicationCommandsData || [];
     let count = 0;
     for (const [id, guild] of client.guilds.cache) {
@@ -53,10 +54,10 @@ client.cooldowns = new Collection();
         await guild.commands.set(cmds);
         count++;
       } catch (e) {
-    console.error(`Failed to register commands for guild ${guild.name} (${id})`, e);
+        console.error(`Failed to register commands for guild ${guild.name} (${id})`, e);
       }
     }
-  console.log(`Registered ${cmds.length} commands in ${count} guild(s).`);
+    console.log(`Registered ${cmds.length} commands in ${count} guild(s).`);
 
     // RAM monitor: log to console every 60s (no Discord presence)
     const formatMB = bytes => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
@@ -68,6 +69,18 @@ client.cooldowns = new Collection();
     };
     updateRam();
     if (!client.__ramInterval) client.__ramInterval = setInterval(updateRam, 60_000);
+
+    // Giveaway watcher: check due giveaways every 30s and conclude them
+    const checkGiveaways = async () => {
+      try {
+        const due = listDueGiveaways(client.db, Date.now());
+        for (const row of due) {
+          await concludeGiveaway(client, client.db, row);
+        }
+      } catch (e) { console.error('Giveaway watcher error', e); }
+    };
+    await checkGiveaways();
+    if (!client.__gaInterval) client.__gaInterval = setInterval(checkGiveaways, 30_000);
   });
 
   client.on(Events.GuildCreate, async guild => {

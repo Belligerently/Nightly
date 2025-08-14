@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
-const { upsertGuildConfig, getGuildConfig, setTranscriptChannel } = require('../../lib/db');
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } = require('discord.js');
+const { upsertGuildConfig, setTranscriptChannel } = require('../../lib/db');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -29,6 +29,18 @@ module.exports = {
       .setName('staffrole')
       .setDescription('Set the staff role to ping on new tickets')
       .addRoleOption(o => o.setName('role').setDescription('Staff role').setRequired(true)))
+    .addSubcommand(sc => sc
+      .setName('welcomechannel')
+      .setDescription('Set the channel where welcome embeds will be sent')
+      .addChannelOption(o => o.setName('channel').setDescription('Welcome channel').addChannelTypes(ChannelType.GuildText).setRequired(true)))
+    .addSubcommand(sc => sc
+      .setName('welcomemessage')
+      .setDescription('Configure the welcome embed message')
+      .addStringOption(o => o.setName('title').setDescription('Embed title').setRequired(false))
+      .addStringOption(o => o.setName('description').setDescription('Embed description (you can use {user} and {server})').setRequired(true))
+      .addStringOption(o => o.setName('color').setDescription('Hex color like #5865F2').setRequired(false))
+      .addStringOption(o => o.setName('thumbnail').setDescription('Thumbnail URL').setRequired(false))
+      .addStringOption(o => o.setName('image').setDescription('Image URL').setRequired(false)))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false),
   adminOnly: true,
@@ -69,6 +81,27 @@ module.exports = {
       const role = interaction.options.getRole('role', true);
       upsertGuildConfig(client.db, interaction.guildId, { staff_role_id: role.id });
       return interaction.reply({ content: `Staff role set to ${role.name}`, ephemeral: true });
+    }
+
+    if (sub === 'welcomechannel') {
+      const channel = interaction.options.getChannel('channel', true);
+      upsertGuildConfig(client.db, interaction.guildId, { welcome_channel_id: channel.id });
+      return interaction.reply({ content: `Welcome channel set to <#${channel.id}>`, ephemeral: true });
+    }
+
+    if (sub === 'welcomemessage') {
+      const title = interaction.options.getString('title') || 'Welcome!';
+      const description = interaction.options.getString('description', true);
+      const color = interaction.options.getString('color') || '#5865F2';
+      const thumbnail = interaction.options.getString('thumbnail') || null;
+      const image = interaction.options.getString('image') || null;
+      const payload = { title, description, color, thumbnail, image };
+      upsertGuildConfig(client.db, interaction.guildId, { welcome_message_json: JSON.stringify(payload) });
+      // Preview embed
+      const embed = new EmbedBuilder().setTitle(title).setDescription(description.replace('{server}', interaction.guild.name).replace('{user}', `${interaction.user}`)).setColor(color);
+      if (thumbnail) embed.setThumbnail(thumbnail);
+      if (image) embed.setImage(image);
+      return interaction.reply({ content: 'Welcome message updated. Preview:', embeds: [embed], ephemeral: true });
     }
   }
 };
