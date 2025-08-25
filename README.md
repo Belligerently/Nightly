@@ -11,6 +11,12 @@ Discord moderation bot with logging, tickets, verification, embeds, role managem
 - Role add/remove: `/role add/remove`
 - Ping: `/ping`
 
+## How to use
+
+Option 1: Contact me on Discord at "shallow." and I can host the bot for you! In the future a site will be made to do this as well!
+
+Option 2: Self Hosting the bot
+
 ## Setup
 1. Install Node.js 18+.
 2. Create a bot at the Discord Developer Portal and get the token and client ID.
